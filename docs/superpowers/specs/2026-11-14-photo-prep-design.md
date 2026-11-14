@@ -1,0 +1,7 @@
+# Plant Doctor Photo Prep
+
+A native Hammerspoon Spoon prepares local JPEG/PNG copies for plant-health/photo workflows. Re-rasterize up to four selected photos as PNG with a maximum 2400-pixel long edge, removing embedded camera/GPS metadata. Preserve originals and isolate each export in a newly created output folder with neutral filenames. No upload, backend, diagnosis, automatic filesystem watchers, shell, hotkeys, or external dependencies. Show a local checklist for useful whole-plant, affected-leaf, leaf-underside and soil photos; warn that visible private content must be checked manually.
+
+Considered Obsidian (new submission account required), Raycast (publisher identity mismatch), and Hammerspoon Spoons (free GitHub review; native image APIs available). Choose Hammerspoon. Use native menu/file picker/alert APIs; no new custom UI. Author Moruk LLC <hi@moruk.co>. Homepage https://plantdoctor.app and README developer backlink https://plantdoctor.app/about.
+
+Acceptance: Lua tests cover caps, invalid input, cancel, never-overwrite exports, partial save failure, resize and lifecycle. Real official Hammerspoon1.1.1 processes a synthetic rotated JPEG with fake GPS metadata; ImageIO independently verifies orientation, bounded PNG dimensions, metadata absence and unchanged input bytes. Build docs.json using native documentation builder. Four exact-head read-only reviews, GitLab canonical MR and protected main, public tested release, one Spoons submission PR. No existing product code changes. Record pending moderation and clean test processes/runtime.
