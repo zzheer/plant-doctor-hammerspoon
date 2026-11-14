@@ -15,6 +15,47 @@ local function dimensions(size)
     and size.w * size.h <= 36000000
 end
 
+-- Read raster dimensions before asking the native decoder to load pixels.
+local function pixelDimensions(path)
+  local file = io.open(path, "rb")
+  if not file then return nil end
+  local data = file:read(25 * 1024 * 1024 + 1); file:close()
+  if not data then return nil end
+  local function u16(i) local a,b=data:byte(i,i+1); return a and b and a*256+b end
+  local function u32(i) local a,b=u16(i),u16(i+2); return a and b and a*65536+b end
+  if data:sub(1,8) == "\137PNG\13\10\26\10" and data:sub(13,16) == "IHDR" then
+    return {w=u32(17), h=u32(21)}
+  end
+  if data:sub(1,2) ~= "\255\216" then return nil end
+  local i=3
+  while i <= #data do
+    if data:byte(i) ~= 255 then return nil end
+    while data:byte(i) == 255 do i=i+1 end
+    local marker=data:byte(i); i=i+1
+    if not marker or marker == 217 or marker == 218 then return nil end
+    if marker ~= 216 and marker ~= 1 and not (marker >= 208 and marker <= 215) then
+      local length=u16(i)
+      if not length or length < 2 or i+length-1 > #data then return nil end
+      if marker >= 192 and marker <= 207 and marker ~= 196 and marker ~= 200 and marker ~= 204 then
+        if length < 8 then return nil end
+        return {h=u16(i+3), w=u16(i+5)}
+      end
+      i=i+length
+    end
+  end
+  return nil
+end
+
+local function pickerPaths(selection)
+  if not selection then return nil end
+  local list={}
+  for _, path in pairs(selection) do
+    if type(path) == "string" then list[#list+1]=path end
+  end
+  table.sort(list)
+  return list
+end
+
 --- PlantDoctorPhotoPrep:exportPhotos(paths, parent) -> table or nil, error
 --- Method
 --- Export up to four JPEG/PNG copies to a new folder, at most 2400 pixels per edge.
@@ -39,15 +80,12 @@ function obj:exportPhotos(paths, parent)
     if not attr or attr.mode ~= "file" or not attr.size or attr.size > 25 * 1024 * 1024 then
       return nil, "A photo is missing, is not a regular file, or exceeds 25 MiB."
     end
-    local exif = hs.image.getExifFromPath(path)
-    if exif and exif.PixelXDimension and exif.PixelYDimension
-      and not dimensions({w=exif.PixelXDimension, h=exif.PixelYDimension}) then
-      return nil, "A photo exceeds the 36 megapixel limit or has invalid dimensions."
-    end
+    local pixels = pixelDimensions(path)
+    if not dimensions(pixels) then return nil, "A photo has invalid raster dimensions or exceeds 36 megapixels." end
     local image = hs.image.imageFromPath(path)
     local size = image and image:size()
     if not dimensions(size) then return nil, "A photo cannot be decoded or has unsupported dimensions." end
-    local scale = math.min(1, 2400 / math.max(size.w, size.h))
+    local scale = math.min(2400, math.max(pixels.w, pixels.h)) / math.max(size.w, size.h)
     prepared[#prepared + 1] = {image=image, size={w=math.max(1, math.floor(size.w * scale)), h=math.max(1, math.floor(size.h * scale))}}
   end
   local base = parent:gsub("/+$", "") .. "/PlantDoctorPhotos-" .. os.date("%Y%m%d-%H%M%S")
@@ -78,9 +116,9 @@ end
 --- Returns:
 ---  * The Spoon object
 function obj:choosePhotos()
-  local paths = hs.dialog.chooseFileOrFolder("Choose up to four plant photos", "", true, false, true, {"jpg", "jpeg", "png"}, true)
+  local paths = pickerPaths(hs.dialog.chooseFileOrFolder("Choose up to four plant photos", "", true, false, true, {"jpg", "jpeg", "png"}, true))
   if not paths then return self end
-  local folders = hs.dialog.chooseFileOrFolder("Choose where to create the new photo folder", "", false, true, false)
+  local folders = pickerPaths(hs.dialog.chooseFileOrFolder("Choose where to create the new photo folder", "", false, true, false))
   if not folders then return self end
   local result, err = self:exportPhotos(paths, folders[1])
   if not result then hs.dialog.blockAlert("Photos were not exported", err, "OK")

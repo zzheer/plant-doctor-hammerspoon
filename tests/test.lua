@@ -37,6 +37,16 @@ hs = {
   end},
   dialog = {chooseFileOrFolder=function() return nil end,blockAlert=function() end},
 }
+local realOpen=io.open
+io.open=function(path, mode)
+  if path:match("^/[^/]+%.%w+$") and mode=="rb" then
+    local w,h=4000,2000
+    if path:find("huge") then w,h=12000,12000 end
+    local function u32(n) return string.char((n>>24)&255,(n>>16)&255,(n>>8)&255,n&255) end
+    return {read=function() return "\137PNG\13\10\26\10"..u32(13).."IHDR"..u32(w)..u32(h) end,close=function() end}
+  end
+  return realOpen(path, mode)
+end
 local spoon=dofile(root.."/Source/PlantDoctorPhotoPrep.spoon/init.lua")
 local function reset()
   fs={["/output"]={mode="directory"},["/source.jpg"]={mode="file",size=1000}}
@@ -51,6 +61,7 @@ reset();reject({"/source.jpg"},"/missing")
 reset();fs["/source.jpg"].size=26*1024*1024;reject({"/source.jpg"})
 reset();fs["/bad.gif"]={mode="file",size=100};reject({"/bad.gif"})
 reset();fs["/broken.jpg"]={mode="file",size=100};reject({"/broken.jpg"})
+reset();fs["/huge.png"]={mode="file",size=100};reject({"/huge.png"})
 reset();local result,err=spoon:exportPhotos({"/source.jpg"},"/output")
 assert(result and not err and #result.files==1 and #result.errors==0)
 assert(writes[1].size.w==2400 and writes[1].size.h==1200)
@@ -62,6 +73,13 @@ assert(writes[1].size.w<=2400 and writes[1].size.h<=2400)
 reset();failSave=true;result=assert(spoon:exportPhotos({"/source.jpg"},"/output"))
 assert(#result.files==0 and #result.errors==1)
 reset();spoon:choosePhotos();assert(mkdirs==0)
+local selections=0
+hs.dialog.chooseFileOrFolder=function()
+ selections=selections+1
+ if selections==1 then return {["1"]="/source.jpg"} end
+ return {["1"]="/output"}
+end
+spoon:choosePhotos();assert(#writes==1)
 spoon:start():start();assert(menuCount==1);spoon:stop():stop();assert(deleted==1)
 assert(spoon.homepage=="https://plantdoctor.app" and spoon.author=="Moruk LLC <hi@moruk.co>")
 print("PASS: Lua safety, export, cancel and lifecycle assertions")
